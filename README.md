@@ -28,11 +28,6 @@ This project applies CNN-based models trained from our own methodology, without 
 
 ## Datasets
 
-### Training Dataset — SLICE-3D
+### Training & Test Dataset — SLICE-3D
 - Source: [ISIC 2024 Challenge](https://challenge2024.isic-archive.com/)
 - ~401,059 samples
-
-### Test Dataset — HAM10000
-- Source: [Kaggle — Skin Cancer MNIST: HAM10000](https://www.kaggle.com/datasets/kmader/skin-cancer-mnist-ham10000)
-- ~10,015 samples
-- Requires initial data engineering to match the resolution of the SLICE-3D dataset and to address sample bias
