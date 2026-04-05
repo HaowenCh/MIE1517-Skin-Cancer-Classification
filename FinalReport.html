@@ -7580,7 +7580,7 @@ a.anchor-link {
 </ul>
 <p>Both branches process the same lesion image independently. Their feature vectors (1024-d and 1792-d) are concatenated into a 2816-d fused representation and passed through a fusion MLP classifier for binary prediction. This parallel design avoids the information bottleneck that would arise from sequential combination and lets each branch specialize freely during training.</p>
 <h3 id="Key-Design-Decisions">Key Design Decisions<a class="anchor-link" href="#Key-Design-Decisions">¶</a></h3><ul>
-<li><strong>Focal Loss</strong> replaces standard BCE to handle the severe (~98:2) class imbalance by down-weighting easy benign examples and focusing gradient on hard malignant cases</li>
+<li><strong>Focal Loss</strong> replaces standard BCE to handle the severe (~99:1) class imbalance by down-weighting easy benign examples and focusing gradient on hard malignant cases</li>
 <li><strong>WeightedRandomSampler</strong> ensures every training batch is approximately class-balanced</li>
 <li><strong>Decision threshold calibration</strong> on the validation set replaces the default 0.5, optimising sensitivity/specificity for a medical screening context</li>
 <li><strong>AUPRC</strong> (Area under Precision-Recall Curve) is the primary evaluation metric, more sensitive to minority-class performance under severe imbalance than AUC-ROC</li>
@@ -7823,7 +7823,7 @@ Benign        : 400,666  (99.90%)
 <li><strong>Focal Loss</strong> (sample level) -- within each batch, the loss further down-weights correctly and confidently classified samples (typically easy benign examples), concentrating the gradient on hard or misclassified examples. With gamma=2, a well-classified sample (p_t=0.9) contributes 100x less loss than a hard sample (p_t=0.1)</li>
 <li><strong>Threshold calibration</strong> (inference level) -- after training, the decision boundary is shifted from 0.5 to the F1-optimal value on the validation set. This corrects for any residual probability miscalibration without retraining</li>
 </ul>
-<h3 id="Data-Augmentation">Data Augmentation<a class="anchor-link" href="#Data-Augmentation">¶</a></h3><p>Training transforms apply the following augmentations to improve generalisation:</p>
+<h3 id="Data-Augmentation">Data Augmentation<a class="anchor-link" href="#Data-Augmentation">¶</a></h3><p>Training transforms apply the following augmentations to improve generalization:</p>
 <ul>
 <li>Random crop (after upscaling by 32px) introduces spatial jitter and prevents the model from relying on fixed border context</li>
 <li>Horizontal and vertical flips exploit the rotational symmetry of skin lesions in TBP images</li>
@@ -8500,13 +8500,12 @@ from each image. The 49 spatial positions are flattened into a sequence and fed 
 <strong>2-layer Bidirectional LSTM</strong> (hidden size 512 per direction, 1024 total). An
 <strong>additive (Bahdanau) attention</strong> layer computes a weighted sum over the 49 LSTM
 output states, focusing on the most diagnostically relevant spatial regions.</p>
-<p>Clinical metadata from <code>ISIC_2024_Training_Supplement.csv</code> is embedded and fused with
-the attention context vector before the final classifier:</p>
+<p>Three continuous clinical metadata features from <code>ISIC_2024_Training_Supplement.csv</code>
+are normalised and fused with the attention context vector before the final classifier:</p>
 <ul>
-<li><code>tbp_lv_dnn_lesion_confidence</code> (float, normalized) -- existing DNN lesion score</li>
-<li><code>iddx_1</code> (categorical) -- primary differential diagnosis, embedded via <code>nn.Embedding</code></li>
-<li><code>attribution</code> (categorical) -- imaging institution, embedded via <code>nn.Embedding</code></li>
-<li><code>mel_thick_mm</code> and <code>mel_mitotic_index</code> (floats, imputed and normalized)</li>
+<li><code>tbp_lv_dnn_lesion_confidence</code> (float, normalised to [0,1]) -- automated TBP lesion score</li>
+<li><code>mel_thick_mm</code> (float, normalised) -- tumour thickness from histopathology</li>
+<li><code>mel_mitotic_index</code> (float, parsed and normalised) -- mitotic rate from histopathology</li>
 </ul>
 <pre><code>Image (224x224)
     |
@@ -8522,7 +8521,7 @@ Sequence of 49 spatial tokens (each 2048-d)
     v
 Additive Attention Pooling  -&gt;  1024-d context vector
     |                                concat
-    +-- Metadata Embedding (-&gt;32-d) --+
+    +-- Metadata Projection (3-&gt;32-d) --+
                     |
                  1056-d
                     |
@@ -8540,27 +8539,24 @@ Additive Attention Pooling  -&gt;  1024-d context vector
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="Supplement-CSV-Feature-Engineering">Supplement CSV Feature Engineering<a class="anchor-link" href="#Supplement-CSV-Feature-Engineering">¶</a></h3><p>The five metadata features used are prepared below. <code>mel_mitotic_index</code> is stored as
-categorical strings in the CSV (e.g. <code>0/mm^2</code>, <code>&lt;1/mm^2</code>, <code>&gt;4/mm^2</code>) and is parsed
-to floats before normalisation. Label encoders are fit on the training split only and
-then applied to val and test to prevent leakage.</p>
+<h3 id="Supplement-CSV-Feature-Engineering">Supplement CSV Feature Engineering<a class="anchor-link" href="#Supplement-CSV-Feature-Engineering">¶</a></h3><p>Three continuous metadata features are loaded from the supplement CSV. <code>mel_mitotic_index</code>
+is stored as categorical strings in the CSV (e.g. <code>0/mm^2</code>, <code>&lt;1/mm^2</code>, <code>&gt;4/mm^2</code>) and is
+parsed to floats before normalisation. All normalisation statistics are fit on the training
+split only and then applied to val and test to prevent data leakage.</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=cell-rnn-data-code">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=cell-rnn-data-code">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [20]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.preprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">LabelEncoder</span>
-
-<span class="n">SUPP_CSV</span> <span class="o">=</span> <span class="n">ROOT</span> <span class="o">/</span> <span class="s1">'ISIC_2024_Training_Supplement.csv'</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="n">SUPP_CSV</span> <span class="o">=</span> <span class="n">ROOT</span> <span class="o">/</span> <span class="s1">'ISIC_2024_Training_Supplement.csv'</span>
 <span class="n">supp</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">SUPP_CSV</span><span class="p">,</span>
                    <span class="n">usecols</span><span class="o">=</span><span class="p">[</span><span class="s1">'isic_id'</span><span class="p">,</span> <span class="s1">'tbp_lv_dnn_lesion_confidence'</span><span class="p">,</span>
-                            <span class="s1">'iddx_1'</span><span class="p">,</span> <span class="s1">'attribution'</span><span class="p">,</span>
                             <span class="s1">'mel_thick_mm'</span><span class="p">,</span> <span class="s1">'mel_mitotic_index'</span><span class="p">])</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">parse_mitotic_index</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
@@ -8586,15 +8582,12 @@ then applied to val and test to prevent leakage.</p>
 <span class="n">df_rnn_val</span>   <span class="o">=</span> <span class="n">add_meta</span><span class="p">(</span><span class="n">df_val</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
 <span class="n">df_rnn_test</span>  <span class="o">=</span> <span class="n">add_meta</span><span class="p">(</span><span class="n">df_test</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
 
-<span class="c1"># Fill any missing supplement values</span>
+<span class="c1"># Fill missing supplement values with 0 (population mean after normalisation)</span>
 <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">'tbp_lv_dnn_lesion_confidence'</span><span class="p">,</span> <span class="s1">'mel_thick_mm'</span><span class="p">,</span> <span class="s1">'mel_mitotic_index'</span><span class="p">]:</span>
     <span class="k">for</span> <span class="n">df_</span> <span class="ow">in</span> <span class="p">[</span><span class="n">df_rnn_train</span><span class="p">,</span> <span class="n">df_rnn_val</span><span class="p">,</span> <span class="n">df_rnn_test</span><span class="p">]:</span>
         <span class="n">df_</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
-<span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">'iddx_1'</span><span class="p">,</span> <span class="s1">'attribution'</span><span class="p">]:</span>
-    <span class="k">for</span> <span class="n">df_</span> <span class="ow">in</span> <span class="p">[</span><span class="n">df_rnn_train</span><span class="p">,</span> <span class="n">df_rnn_val</span><span class="p">,</span> <span class="n">df_rnn_test</span><span class="p">]:</span>
-        <span class="n">df_</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="s1">'Unknown'</span><span class="p">)</span>
 
-<span class="c1"># Normalize numeric features (fit on train only)</span>
+<span class="c1"># Normalise continuous features (fit on train only to prevent leakage)</span>
 <span class="n">df_rnn_train</span><span class="p">[</span><span class="s1">'tbp_conf_norm'</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">df_rnn_train</span><span class="p">[</span><span class="s1">'tbp_lv_dnn_lesion_confidence'</span><span class="p">]</span> <span class="o">/</span> <span class="mf">100.0</span><span class="p">)</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 <span class="n">df_rnn_val</span><span class="p">[</span><span class="s1">'tbp_conf_norm'</span><span class="p">]</span>   <span class="o">=</span> <span class="p">(</span><span class="n">df_rnn_val</span><span class="p">[</span><span class="s1">'tbp_lv_dnn_lesion_confidence'</span><span class="p">]</span>   <span class="o">/</span> <span class="mf">100.0</span><span class="p">)</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 <span class="n">df_rnn_test</span><span class="p">[</span><span class="s1">'tbp_conf_norm'</span><span class="p">]</span>  <span class="o">=</span> <span class="p">(</span><span class="n">df_rnn_test</span><span class="p">[</span><span class="s1">'tbp_lv_dnn_lesion_confidence'</span><span class="p">]</span>  <span class="o">/</span> <span class="mf">100.0</span><span class="p">)</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
@@ -8605,35 +8598,9 @@ then applied to val and test to prevent leakage.</p>
     <span class="n">df_</span><span class="p">[</span><span class="s1">'thick_norm'</span><span class="p">]</span>   <span class="o">=</span> <span class="n">df_</span><span class="p">[</span><span class="s1">'mel_thick_mm'</span><span class="p">]</span>      <span class="o">/</span> <span class="n">thick_max</span>
     <span class="n">df_</span><span class="p">[</span><span class="s1">'mitotic_norm'</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_</span><span class="p">[</span><span class="s1">'mel_mitotic_index'</span><span class="p">]</span> <span class="o">/</span> <span class="n">mitotic_max</span>
 
-<span class="c1"># Label-encode categoricals (fit on train)</span>
-<span class="n">le_iddx</span> <span class="o">=</span> <span class="n">LabelEncoder</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">df_rnn_train</span><span class="p">[</span><span class="s1">'iddx_1'</span><span class="p">])</span>
-<span class="n">le_attr</span> <span class="o">=</span> <span class="n">LabelEncoder</span><span class="p">()</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">df_rnn_train</span><span class="p">[</span><span class="s1">'attribution'</span><span class="p">])</span>
-
-<span class="k">for</span> <span class="n">df_</span> <span class="ow">in</span> <span class="p">[</span><span class="n">df_rnn_train</span><span class="p">,</span> <span class="n">df_rnn_val</span><span class="p">,</span> <span class="n">df_rnn_test</span><span class="p">]:</span>
-    <span class="n">df_</span><span class="p">[</span><span class="s1">'iddx1_enc'</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_</span><span class="p">[</span><span class="s1">'iddx_1'</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">le_iddx</span><span class="o">.</span><span class="n">transform</span><span class="p">([</span><span class="n">x</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">le_iddx</span><span class="o">.</span><span class="n">classes_</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
-    <span class="n">df_</span><span class="p">[</span><span class="s1">'attr_enc'</span><span class="p">]</span>  <span class="o">=</span> <span class="n">df_</span><span class="p">[</span><span class="s1">'attribution'</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">le_attr</span><span class="o">.</span><span class="n">transform</span><span class="p">([</span><span class="n">x</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">le_attr</span><span class="o">.</span><span class="n">classes_</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
-
-<span class="n">N_IDDX</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">le_iddx</span><span class="o">.</span><span class="n">classes_</span><span class="p">)</span>
-<span class="n">N_ATTR</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">le_attr</span><span class="o">.</span><span class="n">classes_</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'iddx_1 categories : </span><span class="si">{</span><span class="n">N_IDDX</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'attribution sites : </span><span class="si">{</span><span class="n">N_ATTR</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">'Supplement CSV merged. Features: tbp_conf_norm, thick_norm, mitotic_norm'</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'  Train rows: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df_rnn_train</span><span class="p">)</span><span class="si">}</span><span class="s1">  Val: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df_rnn_val</span><span class="p">)</span><span class="si">}</span><span class="s1">  Test: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df_rnn_test</span><span class="p">)</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
 </pre></div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>iddx_1 categories : 3
-attribution sites : 7
-</pre>
 </div>
 </div>
 </div>
@@ -8648,12 +8615,9 @@ attribution sites : 7
 <h3 id="Dataset-Class----RNN-Variant">Dataset Class -- RNN Variant<a class="anchor-link" href="#Dataset-Class----RNN-Variant">¶</a></h3><p><code>SkinLesionRNNDataset</code> extends the base dataset to load both the lesion image and
 its matching metadata row from the supplement CSV. Each sample returns a triple:
 <code>(image_tensor, metadata_dict, label)</code>.</p>
-<p>The metadata dict contains:</p>
+<p>The metadata dict contains a single key:</p>
 <ul>
-<li><code>iddx1</code> -- encoded category index (LongTensor) for the primary differential diagnosis</li>
-<li><code>attr</code> -- encoded category index (LongTensor) for the imaging institution</li>
-<li><code>confs</code>, <code>thick</code>, <code>mitotic</code> -- normalized float scalars (FloatTensor) for the three
-continuous metadata features</li>
+<li><code>numeric</code> -- FloatTensor of shape (3,) holding <code>[tbp_conf_norm, thick_norm, mitotic_norm]</code></li>
 </ul>
 <p>Rows whose <code>isic_id</code> is absent from the supplement CSV are silently dropped at split
 time so that all dataset items have complete metadata.</p>
@@ -8670,7 +8634,7 @@ time so that all dataset items have complete metadata.</p>
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">SkinLesionRNNDataset</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
     <span class="c1"># Returns (image, metadata_dict, label)</span>
-    <span class="c1"># metadata keys: 'iddx1' (LongTensor), 'attr' (LongTensor), 'numeric' (FloatTensor[3])</span>
+    <span class="c1"># metadata key: 'numeric' (FloatTensor[3]: tbp_conf_norm, thick_norm, mitotic_norm)</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataframe</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">df</span>        <span class="o">=</span> <span class="n">dataframe</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">transform</span> <span class="o">=</span> <span class="n">transform</span>
@@ -8684,8 +8648,6 @@ time so that all dataset items have complete metadata.</p>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">:</span>
             <span class="n">image</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
         <span class="n">meta</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s1">'iddx1'</span>  <span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">'iddx1_enc'</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
-            <span class="s1">'attr'</span>   <span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">'attr_enc'</span><span class="p">]),</span>  <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
             <span class="s1">'numeric'</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
                 <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="s1">'tbp_conf_norm'</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">'thick_norm'</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">'mitotic_norm'</span><span class="p">]],</span>
                 <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
@@ -8735,27 +8697,23 @@ time so that all dataset items have complete metadata.</p>
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="Model-Definition">Model Definition<a class="anchor-link" href="#Model-Definition">¶</a></h3><p>Three sub-modules make up <code>SpatialBiLSTM</code>:</p>
 <p><strong>MetadataEmbedder</strong>
-Combines categorical and continuous metadata into a single fixed-size vector:</p>
-<ul>
-<li><code>iddx_1</code> and <code>attribution</code> are passed through separate <code>nn.Embedding</code> layers (8-d each)
-because their ordinal relationship is meaningless -- embedding lets the model learn
-the right geometric distances</li>
-<li>The three continuous features are concatenated and projected by a single linear layer</li>
-<li>All sub-vectors are concatenated and passed through a two-layer MLP to produce a
-32-d metadata representation</li>
-</ul>
+Projects the three continuous metadata features into a fixed 32-d representation via a
+two-layer MLP (Linear -&gt; ReLU -&gt; Linear -&gt; ReLU). Using a small neural projection rather
+than a single linear layer allows the model to learn non-linear interactions between
+<code>tbp_lv_dnn_lesion_confidence</code>, <code>mel_thick_mm</code>, and <code>mel_mitotic_index</code> before fusing
+them with the visual context vector.</p>
 <p><strong>AdditiveAttention (Bahdanau)</strong>
 Learns a scalar energy score for each of the 49 LSTM output states and takes their
-weighted sum. Unlike mean pooling, this allows the model to focus on the subset of
-spatial positions most relevant for malignancy (e.g. the lesion border or dark patches)
-while suppressing uninformative background positions.</p>
+weighted sum. Unlike mean pooling, this allows the model to focus on the spatial positions
+most relevant for malignancy (e.g. lesion border or dark pigmented patches) while
+suppressing uninformative background regions.</p>
 <p><strong>SpatialBiLSTM (full model)</strong></p>
 <ol>
 <li>ResNet-50 up to <code>layer4</code> (no global pool) produces a <code>(B, 2048, 7, 7)</code> feature map</li>
 <li>Reshaped to <code>(B, 49, 2048)</code> -- 49 spatial tokens, each 2048-d</li>
 <li>2-layer BiLSTM processes the sequence; output is <code>(B, 49, 1024)</code></li>
 <li>Additive attention collapses to a <code>(B, 1024)</code> context vector</li>
-<li>Metadata embedding (32-d) is concatenated: <code>(B, 1056)</code></li>
+<li>Metadata projection (3 -&gt; 32-d) is concatenated: <code>(B, 1056)</code></li>
 <li>BatchNorm -&gt; Dropout -&gt; FC(512) -&gt; ReLU -&gt; Dropout -&gt; FC(1) -&gt; logit</li>
 </ol>
 </div>
@@ -8770,21 +8728,15 @@ while suppressing uninformative background positions.</p>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MetadataEmbedder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_iddx</span><span class="p">,</span> <span class="n">n_attr</span><span class="p">,</span> <span class="n">meta_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">):</span>
+    <span class="c1"># Projects 3 continuous features -&gt; meta_dim via a small MLP</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">meta_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="n">emb_iddx</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">n_iddx</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
-        <span class="n">emb_attr</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">n_attr</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">emb_iddx</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">n_iddx</span><span class="p">,</span> <span class="n">emb_iddx</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">emb_attr</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">n_attr</span><span class="p">,</span> <span class="n">emb_attr</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">proj</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">emb_iddx</span> <span class="o">+</span> <span class="n">emb_attr</span> <span class="o">+</span> <span class="mi">3</span><span class="p">,</span> <span class="n">meta_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">meta_dim</span><span class="p">),</span>
             <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(</span><span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">meta</span><span class="p">):</span>
-        <span class="n">e</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">emb_iddx</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s1">'iddx1'</span><span class="p">]),</span>
-                       <span class="bp">self</span><span class="o">.</span><span class="n">emb_attr</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s1">'attr'</span><span class="p">]),</span>
-                       <span class="n">meta</span><span class="p">[</span><span class="s1">'numeric'</span><span class="p">]],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">proj</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">proj</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s1">'numeric'</span><span class="p">])</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">AdditiveAttention</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
@@ -8803,8 +8755,7 @@ while suppressing uninformative background positions.</p>
     <span class="c1"># -&gt; 2-layer BiLSTM -&gt; additive attention -&gt; metadata fusion -&gt; classifier</span>
     <span class="n">RESNET_OUT</span> <span class="o">=</span> <span class="mi">2048</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_iddx</span><span class="p">,</span> <span class="n">n_attr</span><span class="p">,</span>
-                 <span class="n">lstm_hidden</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">lstm_layers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">meta_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">dropout</span><span class="o">=</span><span class="n">DROPOUT</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lstm_hidden</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">lstm_layers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">meta_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">dropout</span><span class="o">=</span><span class="n">DROPOUT</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="n">resnet</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">resnet50</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">ResNet50_Weights</span><span class="o">.</span><span class="n">DEFAULT</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">backbone</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
@@ -8817,10 +8768,10 @@ while suppressing uninformative background positions.</p>
             <span class="n">dropout</span><span class="o">=</span><span class="n">dropout</span> <span class="k">if</span> <span class="n">lstm_layers</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">)</span>
 
         <span class="n">bilstm_out</span> <span class="o">=</span> <span class="n">lstm_hidden</span> <span class="o">*</span> <span class="mi">2</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">attention</span>    <span class="o">=</span> <span class="n">AdditiveAttention</span><span class="p">(</span><span class="n">bilstm_out</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">meta_embedder</span> <span class="o">=</span> <span class="n">MetadataEmbedder</span><span class="p">(</span><span class="n">n_iddx</span><span class="p">,</span> <span class="n">n_attr</span><span class="p">,</span> <span class="n">meta_dim</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention</span>     <span class="o">=</span> <span class="n">AdditiveAttention</span><span class="p">(</span><span class="n">bilstm_out</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta_embedder</span> <span class="o">=</span> <span class="n">MetadataEmbedder</span><span class="p">(</span><span class="n">meta_dim</span><span class="p">)</span>
 
-        <span class="n">fused</span> <span class="o">=</span> <span class="n">bilstm_out</span> <span class="o">+</span> <span class="n">meta_dim</span>
+        <span class="n">fused</span> <span class="o">=</span> <span class="n">bilstm_out</span> <span class="o">+</span> <span class="n">meta_dim</span>   <span class="c1"># 1024 + 32 = 1056</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
             <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">fused</span><span class="p">),</span>
             <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout</span><span class="p">),</span>
@@ -8836,11 +8787,11 @@ while suppressing uninformative background positions.</p>
         <span class="n">lstm_out</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bilstm</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>                       <span class="c1"># (B, 49, 1024)</span>
         <span class="n">context</span>  <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention</span><span class="p">(</span><span class="n">lstm_out</span><span class="p">)</span>                  <span class="c1"># (B, 1024)</span>
         <span class="n">meta_vec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta_embedder</span><span class="p">(</span><span class="n">meta</span><span class="p">)</span>                  <span class="c1"># (B, 32)</span>
-        <span class="n">fused</span>    <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">context</span><span class="p">,</span> <span class="n">meta_vec</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">fused</span>    <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">context</span><span class="p">,</span> <span class="n">meta_vec</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>     <span class="c1"># (B, 1056)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="p">(</span><span class="n">fused</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 
 
-<span class="n">rnn_model</span> <span class="o">=</span> <span class="n">SpatialBiLSTM</span><span class="p">(</span><span class="n">n_iddx</span><span class="o">=</span><span class="n">N_IDDX</span><span class="p">,</span> <span class="n">n_attr</span><span class="o">=</span><span class="n">N_ATTR</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+<span class="n">rnn_model</span> <span class="o">=</span> <span class="n">SpatialBiLSTM</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
 <span class="n">rnn_total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">rnn_model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'SpatialBiLSTM total parameters: </span><span class="si">{</span><span class="n">rnn_total</span><span class="si">:</span><span class="s1">,</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
 </pre></div>
@@ -9636,16 +9587,25 @@ confident and wrong (high-stakes errors), or uncertain near the decision boundar
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="15.-Personal-Skin-Lesion-Prediction">15. Personal Skin Lesion Prediction<a class="anchor-link" href="#15.-Personal-Skin-Lesion-Prediction">¶</a></h2><p>This section applies the trained <strong>Spatial BiLSTM (RNN)</strong> model to two personal skin
-lesion photographs found in the project root. These
+lesion photographs found in the project root (<code>testimg1.jpg</code>, <code>testimg2.jpg</code>). These
 images were not part of any training, validation, or test split and represent a
 completely unseen, real-world use case.</p>
 <h3 id="Methodology">Methodology<a class="anchor-link" href="#Methodology">¶</a></h3><p>The images are preprocessed using the same <code>eval_transform</code> pipeline applied to the
 ISIC 2024 test set (resize to 256, centre crop to 224, ImageNet normalisation). Because
-no clinical metadata is available for these personal images, all metadata inputs are
-zeroed -- identical to the approach used for HAM10000 inference in Section 15.</p>
+no clinical supplement data is available for personal photographs, the three metadata
+features (<code>tbp_lv_dnn_lesion_confidence</code>, <code>mel_thick_mm</code>, <code>mel_mitotic_index</code>) are set
+to <strong>0.0</strong>, which is equivalent to the population mean under normalisation.</p>
 <p>The model outputs a sigmoid probability P(malignant). The calibrated threshold
 <code>rnn_best_thresh</code> (determined on the ISIC 2024 validation set in Section 12) is applied
 to produce the binary prediction.</p>
+<h3 id="Important-Disclaimer">Important Disclaimer<a class="anchor-link" href="#Important-Disclaimer">¶</a></h3><blockquote>
+<p><strong>This prediction is for educational and demonstration purposes only.</strong>
+The model was trained on standardised TBP dermoscopy images under controlled acquisition
+conditions. Personal photographs taken with a mobile camera differ significantly in
+lighting, resolution, focus, and angle. Predictions on such images carry high
+uncertainty and must not be used as a substitute for professional medical diagnosis.
+Any skin lesion of concern should be assessed by a qualified dermatologist.</p>
+</blockquote>
 </div>
 </div>
 </div>
@@ -9659,7 +9619,7 @@ to produce the binary prediction.</p>
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Section 15 -- Personal Skin Lesion Prediction</span>
 <span class="c1"># Evaluates testimg1.jpg and testimg2.jpg using the trained RNN model.</span>
-<span class="c1"># Metadata is zeroed (not available for personal images).</span>
+<span class="c1"># Supplement metadata unavailable; continuous features set to 0.0.</span>
 
 <span class="n">personal_images</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">{</span><span class="s1">'path'</span><span class="p">:</span> <span class="n">ROOT</span> <span class="o">/</span> <span class="s1">'testimg1.jpg'</span><span class="p">,</span> <span class="s1">'label'</span><span class="p">:</span> <span class="s1">'Image 1'</span><span class="p">},</span>
@@ -9672,46 +9632,39 @@ to produce the binary prediction.</p>
 <span class="n">results_personal</span> <span class="o">=</span> <span class="p">[]</span>
 <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">personal_images</span><span class="p">:</span>
     <span class="n">img_raw</span>  <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s1">'path'</span><span class="p">])</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s1">'RGB'</span><span class="p">)</span>
-    <span class="n">img_t</span>    <span class="o">=</span> <span class="n">eval_transform</span><span class="p">(</span><span class="n">img_raw</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>   <span class="c1"># (1, 3, 224, 224)</span>
-    <span class="c1"># Zero metadata -- no clinical supplement available</span>
+    <span class="n">img_t</span>    <span class="o">=</span> <span class="n">eval_transform</span><span class="p">(</span><span class="n">img_raw</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+    <span class="c1"># No supplement metadata available -- zero the continuous features</span>
     <span class="n">meta_zero</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s1">'iddx1'</span>  <span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">),</span>
-        <span class="s1">'attr'</span>   <span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">),</span>
         <span class="s1">'numeric'</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">),</span>
     <span class="p">}</span>
     <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
         <span class="n">logit</span> <span class="o">=</span> <span class="n">rnn_model</span><span class="p">(</span><span class="n">img_t</span><span class="p">,</span> <span class="n">meta_zero</span><span class="p">)</span>
         <span class="n">prob</span>  <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">logit</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
-    <span class="n">pred</span>  <span class="o">=</span> <span class="s1">'Malignant'</span> <span class="k">if</span> <span class="n">prob</span> <span class="o">&gt;=</span> <span class="n">rnn_best_thresh</span> <span class="k">else</span> <span class="s1">'Benign'</span>
+    <span class="n">pred</span> <span class="o">=</span> <span class="s1">'Malignant'</span> <span class="k">if</span> <span class="n">prob</span> <span class="o">&gt;=</span> <span class="n">rnn_best_thresh</span> <span class="k">else</span> <span class="s1">'Benign'</span>
     <span class="n">results_personal</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-        <span class="s1">'name'</span>    <span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="s1">'label'</span><span class="p">],</span>
-        <span class="s1">'img_raw'</span> <span class="p">:</span> <span class="n">img_raw</span><span class="p">,</span>
-        <span class="s1">'prob'</span>    <span class="p">:</span> <span class="n">prob</span><span class="p">,</span>
-        <span class="s1">'pred'</span>    <span class="p">:</span> <span class="n">pred</span><span class="p">,</span>
-        <span class="s1">'thresh'</span>  <span class="p">:</span> <span class="n">rnn_best_thresh</span><span class="p">,</span>
+        <span class="s1">'name'</span>   <span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="s1">'label'</span><span class="p">],</span>
+        <span class="s1">'img_raw'</span><span class="p">:</span> <span class="n">img_raw</span><span class="p">,</span>
+        <span class="s1">'prob'</span>   <span class="p">:</span> <span class="n">prob</span><span class="p">,</span>
+        <span class="s1">'pred'</span>   <span class="p">:</span> <span class="n">pred</span><span class="p">,</span>
+        <span class="s1">'thresh'</span> <span class="p">:</span> <span class="n">rnn_best_thresh</span><span class="p">,</span>
     <span class="p">})</span>
     <span class="nb">print</span><span class="p">(</span><span class="s1">'</span><span class="si">{}</span><span class="s1">: P(malignant)=</span><span class="si">{:.4f}</span><span class="s1">  -&gt;  </span><span class="si">{}</span><span class="s1"> (threshold=</span><span class="si">{:.3f}</span><span class="s1">)'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
         <span class="n">item</span><span class="p">[</span><span class="s1">'label'</span><span class="p">],</span> <span class="n">prob</span><span class="p">,</span> <span class="n">pred</span><span class="p">,</span> <span class="n">rnn_best_thresh</span><span class="p">))</span>
 
-<span class="c1"># ── Visualisation ─────────────────────────────────────────────────────────────</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.patches</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mpatches</span>
 
 <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
-
 <span class="k">for</span> <span class="n">ax</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">axes</span><span class="p">,</span> <span class="n">results_personal</span><span class="p">):</span>
     <span class="n">display_img</span> <span class="o">=</span> <span class="n">res</span><span class="p">[</span><span class="s1">'img_raw'</span><span class="p">]</span><span class="o">.</span><span class="n">resize</span><span class="p">((</span><span class="mi">300</span><span class="p">,</span> <span class="mi">300</span><span class="p">))</span>
     <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">display_img</span><span class="p">))</span>
     <span class="n">ax</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">([]);</span> <span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">([])</span>
-
     <span class="n">edge_c</span> <span class="o">=</span> <span class="s1">'#e74c3c'</span> <span class="k">if</span> <span class="n">res</span><span class="p">[</span><span class="s1">'pred'</span><span class="p">]</span> <span class="o">==</span> <span class="s1">'Malignant'</span> <span class="k">else</span> <span class="s1">'#3498db'</span>
     <span class="k">for</span> <span class="n">sp</span> <span class="ow">in</span> <span class="n">ax</span><span class="o">.</span><span class="n">spines</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
         <span class="n">sp</span><span class="o">.</span><span class="n">set_edgecolor</span><span class="p">(</span><span class="n">edge_c</span><span class="p">);</span> <span class="n">sp</span><span class="o">.</span><span class="n">set_linewidth</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
-
     <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span>
         <span class="s1">'</span><span class="si">{}</span><span class="se">\n</span><span class="s1">Prediction: </span><span class="si">{}</span><span class="se">\n</span><span class="s1">P(malignant) = </span><span class="si">{:.4f}</span><span class="se">\n</span><span class="s1">Threshold = </span><span class="si">{:.3f}</span><span class="s1">'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
             <span class="n">res</span><span class="p">[</span><span class="s1">'name'</span><span class="p">],</span> <span class="n">res</span><span class="p">[</span><span class="s1">'pred'</span><span class="p">],</span> <span class="n">res</span><span class="p">[</span><span class="s1">'prob'</span><span class="p">],</span> <span class="n">res</span><span class="p">[</span><span class="s1">'thresh'</span><span class="p">]),</span>
-        <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
-        <span class="n">color</span><span class="o">=</span><span class="n">edge_c</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">'bold'</span><span class="p">)</span>
+        <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">edge_c</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">'bold'</span><span class="p">)</span>
 
 <span class="n">legend_patches</span> <span class="o">=</span> <span class="p">[</span>
     <span class="n">mpatches</span><span class="o">.</span><span class="n">Patch</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="s1">'#e74c3c'</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">'Predicted: Malignant'</span><span class="p">),</span>
@@ -9719,12 +9672,14 @@ to produce the binary prediction.</p>
 <span class="p">]</span>
 <span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">handles</span><span class="o">=</span><span class="n">legend_patches</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s1">'lower center'</span><span class="p">,</span> <span class="n">ncol</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
            <span class="n">fontsize</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.04</span><span class="p">))</span>
-
-<span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span>
-    <span class="s1">'Personal Skin Lesion Prediction -- RNN Baseline'</span><span class="p">,</span>
-    <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">'bold'</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">1.02</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s1">'Personal Skin Lesion Prediction -- RNN Baseline'</span><span class="p">,</span>
+             <span class="n">fontsize</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">'bold'</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">1.02</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">'DISCLAIMER: For educational purposes only.'</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">'Do not use as a substitute for professional medical diagnosis.'</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -9772,11 +9727,11 @@ ablations (DenseNet-121 alone, EfficientNet-B4 alone, ResNet-50) establish the
 contribution of each component: if the full hybrid substantially outperforms both ablations
 on AUPRC, the two branches are providing genuinely complementary rather than redundant
 features.</p>
-<p>The <strong>Spatial BiLSTM (RNN)</strong> brings a different axis of improvement: it fuses clinical
-metadata with spatial image features. Where the hybrid CNN's performance ceiling is set by
-what is visually observable in the lesion crop, the RNN can additionally leverage
-non-visual diagnostic cues that a purely image-based model cannot access. This is discussed
-in detail in Section 16.5.</p>
+<p>The <strong>Spatial BiLSTM (RNN)</strong> brings a different axis of improvement: it fuses continuous
+clinical metadata with spatial image features. Where the hybrid CNN's performance ceiling
+is set by what is visually observable in the lesion crop, the RNN can additionally leverage
+non-visual diagnostic signals that a purely image-based model cannot access. This is
+discussed in detail in Section 16.5.</p>
 <hr/>
 <h3 id="16.2-Why-the-ISIC-2024-Dataset-is-Extremely-Imbalanced">16.2 Why the ISIC 2024 Dataset is Extremely Imbalanced<a class="anchor-link" href="#16.2-Why-the-ISIC-2024-Dataset-is-Extremely-Imbalanced">¶</a></h3><p>The approximately <strong>99:1 benign-to-malignant ratio</strong> in the SLICE-3D dataset is not a
 collection artefact -- it accurately reflects the clinical reality of population-level skin
@@ -9798,9 +9753,9 @@ count.</p>
 </li>
 <li><p><strong>Intended deployment condition.</strong> This imbalance is the real-world operating environment
 for a screening tool. A model trained on artificially balanced data would be
-miscalibrated when deployed in practice, overestimating malignancy probability for the
-average patient. Accepting and handling the natural imbalance directly -- rather than
-resampling it away -- produces a more clinically honest and deployable system.</p>
+miscalibrated when deployed in practice. Accepting and handling the natural imbalance
+directly -- rather than resampling it away -- produces a more clinically honest and
+deployable system.</p>
 </li>
 </ul>
 <hr/>
@@ -9829,79 +9784,68 @@ per batch, while Focal Loss governs how much each one contributes to the gradien
 <hr/>
 <h3 id="16.4-Why-Metadata-is-Incorporated-Alongside-Lesion-Images">16.4 Why Metadata is Incorporated Alongside Lesion Images<a class="anchor-link" href="#16.4-Why-Metadata-is-Incorporated-Alongside-Lesion-Images">¶</a></h3><p>In clinical practice, a lesion image never arrives in isolation. During a Total Body
 Photography (TBP) or dermoscopy examination, the imaging workflow automatically generates
-and records a structured set of patient and lesion-level metadata alongside each photograph:</p>
+and records structured patient and lesion-level data alongside each photograph:</p>
 <ul>
-<li><strong>Patient demographics</strong> (age, sex, anatomical site) are logged as part of standard
-clinical intake and are always available at the time of image capture</li>
 <li><strong>Automated lesion scores</strong> (<code>tbp_lv_dnn_lesion_confidence</code>) are computed by the TBP
-imaging system as part of its own analysis pipeline and are embedded in the image record</li>
-<li><strong>Preliminary differential diagnosis</strong> (<code>iddx_1</code>) may be assigned by the examining
-clinician or an automated pre-screening tool before the final diagnosis is made</li>
+imaging system as part of its own analysis pipeline and stored with the image record</li>
 <li><strong>Pathological measurements</strong> (<code>mel_thick_mm</code>, <code>mel_mitotic_index</code>) are reported as part
 of the histopathology result for biopsied lesions and linked back to the lesion record</li>
 </ul>
 <p>This means that at the decision point, a model with access to both image and metadata has
 access to strictly more information than one using the image alone -- and this extra
-information is routinely available in the clinical setting, not a specially collected
-supplement. Incorporating metadata mirrors how a clinician actually makes a diagnosis:
-visually inspecting the lesion and contextualising it with the patient's age, history,
-anatomical site, and any prior automated scores. Ignoring readily available metadata would
-be analogous to a dermatologist refusing to look at the patient's chart before deciding.</p>
+information is routinely available in the clinical setting as a natural by-product of the
+examination workflow. Incorporating metadata mirrors how a clinician actually reasons:
+visually inspecting the lesion <em>and</em> contextualising it with any available diagnostic
+scores and pathological measurements. Ignoring readily available data would be analogous
+to a dermatologist refusing to consult the patient's pathology report before deciding.</p>
 <hr/>
-<h3 id="16.5-RNN-Metadata-Fusion:-Advantage-Over-the-Hybrid-CNN-and-Its-Limitations">16.5 RNN Metadata Fusion: Advantage Over the Hybrid CNN and Its Limitations<a class="anchor-link" href="#16.5-RNN-Metadata-Fusion:-Advantage-Over-the-Hybrid-CNN-and-Its-Limitations">¶</a></h3><h4 id="Why-the-RNN-can-outperform-the-image-only-CNN">Why the RNN can outperform the image-only CNN<a class="anchor-link" href="#Why-the-RNN-can-outperform-the-image-only-CNN">¶</a></h4><p>The Spatial BiLSTM fuses a 32-d metadata embedding directly with the 1024-d attention
+<h3 id="16.5-RNN-Metadata-Fusion:-Advantage-Over-the-Hybrid-CNN-and-Its-Limitations">16.5 RNN Metadata Fusion: Advantage Over the Hybrid CNN and Its Limitations<a class="anchor-link" href="#16.5-RNN-Metadata-Fusion:-Advantage-Over-the-Hybrid-CNN-and-Its-Limitations">¶</a></h3><h4 id="Why-the-RNN-can-outperform-the-image-only-CNN">Why the RNN can outperform the image-only CNN<a class="anchor-link" href="#Why-the-RNN-can-outperform-the-image-only-CNN">¶</a></h4><p>The Spatial BiLSTM fuses a 32-d metadata projection directly with the 1024-d attention
 context vector before the final classifier. This allows the model to resolve ambiguous
-visual cases using non-visual cues that the hybrid CNN has no access to:</p>
+visual cases using non-visual diagnostic signals:</p>
 <ul>
-<li>A lesion with mildly atypical morphology in an elderly patient with a high-suspicion
-differential diagnosis (<code>iddx_1</code> pointing toward melanoma sub-type) would receive a
-higher malignancy probability than the identical-looking lesion in a young patient
-with a benign differential -- a distinction impossible from image alone</li>
-<li>The institution embedding (<code>attribution</code>) lets the model partially correct for
-systematic colour calibration differences across imaging sites, acting as a lightweight
-domain-adaptation mechanism</li>
+<li><code>tbp_lv_dnn_lesion_confidence</code> provides an independent automated assessment of the
+lesion from the TBP imaging system, which may capture features not extractable from
+the 224x224 crop alone</li>
 <li><code>mel_thick_mm</code> and <code>mel_mitotic_index</code>, when non-zero, are direct histopathological
-indicators of malignancy; no visual feature in a cropped lesion image can carry
-this information directly</li>
+indicators of malignancy; no visual feature in a cropped lesion image can carry this
+information independently</li>
 </ul>
 <p>On cases near the decision boundary -- where visual features are ambiguous and errors are
 most costly -- the RNN's metadata branch provides an additional discriminative signal.
 This is expected to manifest as higher recall (lower false-negative rate) at the same
-precision level, which is the most clinically important trade-off for a population
-screening tool.</p>
+precision level, which is the most clinically important trade-off for a screening tool.</p>
 <h4 id="Limitations-and-downsides-of-metadata-fusion">Limitations and downsides of metadata fusion<a class="anchor-link" href="#Limitations-and-downsides-of-metadata-fusion">¶</a></h4><ul>
 <li><p><strong>Metadata is not always available.</strong> As demonstrated in Section 15, when supplement
 features are absent -- as they are for personal photographs -- all metadata inputs are
-zeroed. The metadata branch degenerates to a fixed learned bias that provides no
+zeroed. The metadata branch then provides only a fixed learned bias, contributing no
 case-specific information. Under this condition the RNN is effectively an image-only
-model but built on a heavier backbone (ResNet-50 + BiLSTM) than EfficientNet-B4 alone,
-and its AUPRC advantage over the hybrid CNN is expected to shrink or reverse.</p>
-</li>
-<li><p><strong>Domain shift amplification.</strong> Categorical embeddings (<code>iddx_1</code>, <code>attribution</code>) are
-fit on the ISIC 2024 training distribution. An unseen institution or diagnostic code
-maps to index 0 -- the most frequent training class -- introducing a systematic encoding
-bias that does not affect image features, which generalise through transfer learning.
-The RNN is therefore more brittle to distribution shift outside the ISIC 2024 cohort.</p>
+model but built on a heavier backbone (ResNet-50 + BiLSTM) than EfficientNet-B4 alone.</p>
 </li>
 <li><p><strong>Training data dependency.</strong> Rows without supplement CSV entries are dropped from the
 RNN training split, reducing the effective training set size compared to the CNN, which
 uses every image in the ground-truth CSV.</p>
 </li>
+<li><p><strong>Value sparsity.</strong> <code>mel_thick_mm</code> and <code>mel_mitotic_index</code> are only populated for
+lesions that proceeded to biopsy. For the majority of samples these values are zero,
+meaning the metadata branch primarily learns from <code>tbp_lv_dnn_lesion_confidence</code> and
+the bias correction from the other two features applies only to biopsy-confirmed cases.</p>
+</li>
 </ul>
-<p>In summary: <strong>when complete metadata can be guaranteed</strong> -- which is realistic for
+<p>In summary: when complete and informative metadata can be guaranteed -- realistic for
 integrated TBP systems in clinical deployment -- the metadata-fused RNN is the stronger
-model. <strong>For cross-domain or field settings</strong> where metadata is absent or heterogeneous,
-the hybrid CNN's image-only design provides more portable and robust performance.</p>
+model. For cross-domain or field settings where metadata is absent or sparse, the hybrid
+CNN's image-only design provides more portable and robust performance.</p>
 <hr/>
 <h3 id="16.6-Conclusion">16.6 Conclusion<a class="anchor-link" href="#16.6-Conclusion">¶</a></h3><p>This project demonstrates that a carefully designed training strategy (Focal Loss,
 WeightedRandomSampler, threshold calibration) is at least as critical as model
 architecture when tackling skin cancer classification under severe real-world class
 imbalance. The hybrid CNN achieves strong image-based discrimination by combining
-complementary backbones, while the RNN baseline shows that incorporating routine clinical
-metadata -- metadata already generated as a by-product of the clinical imaging workflow --
-can push performance further on ambiguous borderline cases. The two architectures serve
-complementary roles: the hybrid CNN is the more robust and portable choice for
-cross-domain deployment, while the RNN is better suited to integrated clinical systems
-where structured metadata accompanies every image at inference time.</p>
+complementary backbones, while the RNN baseline shows that incorporating continuous
+clinical metadata -- data already generated as a by-product of the clinical imaging
+workflow -- can push performance further on ambiguous borderline cases. The two
+architectures serve complementary roles: the hybrid CNN is the more robust and portable
+choice for cross-domain deployment, while the RNN is better suited to integrated clinical
+systems where structured metadata accompanies every image at inference time.</p>
 </div>
 </div>
 </div>
